@@ -1,30 +1,12 @@
 from openpyxl import load_workbook
+from openpyxl.comments import Comment
+from sample_result import user, results
+import courses
 
 wb = load_workbook('static/excel/spreadsheet_template.xlsx')
 
-
-results = [
-    { 'courseCode':'ges_100_1', 'session': 2017, 'score': 59 },
-    { 'courseCode':'chm_130_1', 'session': 2016, 'score': 66 },
-    { 'courseCode':'chm_131_2', 'session': 2016, 'score': 57 },
-    { 'courseCode':'phy_216_1', 'session': 2017, 'score': 71 },
-    { 'courseCode':'ges_100_1', 'session': 2016, 'score': 34 },
-    { 'courseCode':'eng_201_1', 'session': 2017, 'score': 43 },
-    { 'courseCode':'eng_103_2', 'session': 2016, 'score': 49 },
-]
-
+# sort only by session
 results.sort(key = lambda i: (i['session']))
-
-user = {
-    'first_name': 'John',
-    'last_name': 'Doe',
-    'other_name': '',
-    'soo': 'Rivers',
-    'mat_no': 'U2015/3025102',
-    'sex': 'M',
-    'marital': 'Single',
-    'department': 'MEG'
-}
 
 def get_spread_sheet():
     user['name'] = (user['last_name'].upper() + ', ' + 
@@ -32,86 +14,89 @@ def get_spread_sheet():
     for key in user.keys():
         if sheetMap.get(key) != None:
             wb['L100'][sheetMap[key]] = user[key]
+
+    level_status = { 'sessions': [0], 'last_sem': 101 }
+    result_map = {}
+    courseMap = courses.MEG
+
+    if user['department'] == 'MCT':
+        courseMap = courses.MCT
+    # step 1: remove carry-overs
     for result in results:
-        courseMap = courseMapMEG
-        if department == 'MCT':
-            courseMap = courseMapMCT
-        map = courseMap[result['courseCode']]
-        wb[map['level']][map['cell']] = result['score']
-        if wb[map['level']][sheetMap['session']].value == None:
-            wb[map['level']][sheetMap['session']] = str(result['session'] - 1) + '/' + str(result['session'])
+        result.update(courseMap[result['courseCode']])
+        result.update({'_session': result['session'], 'comment': ''})
+        map = result_map.get(result['courseCode'])
+        if  level_status['sessions'][-1] != result['session']:
+            level_status['sessions'].append(result['session'])
+        if result['level'] + result['sem'] > level_status['last_sem']:
+            level_status['last_sem'] = result['level'] + result['sem']
+        if result['score'] < 40:
+            result['cu'] = 0
+        if map == None or (map['score'] < 40 and result['session'] > map['session']):
+            if map != None:
+                result['comment'] = (map['comment'] + '[ session: ' + str(map['session'] - 1) + '/' 
+                    + str(map['session']) + ', score: ' + str(map['score']) + ']\n')
+                result['_session'] = result['session'] + 0.4
+            result_map[result['courseCode']] = result
+        else:
+            result_map[result['courseCode']]['comment'] = (map['comment'] + 'flag* [ session: ' + str(result['session'] - 1) + '/' 
+                + str(result['session']) + ', score: ' + str(result['score']) + ']\n')
+
+    # step 2: add missing courses till last semester    
+    for key in courseMap.keys():
+        if result_map.get(key) == None and courseMap[key]['level'] + courseMap[key]['sem'] <= level_status['last_sem']:
+            result_map[key] = courseMap[key]
+            session = level_status['sessions'][int(courseMap[key]['level']/100)]
+            result_map[key].update({'courseCode': key, 'cu': None, '_session': session + 0.5, 'session': session })
+
+    # step 3: write the session to sheet
+    for i in range(1, len(level_status['sessions'])):
+        wb['L' + str(i * 100)][sheetMap['session']] = str(level_status['sessions'][i] - 1) + '/' + str(level_status['sessions'][i])
+
+    final_results = []
+    final_results.extend(result_map.values())
+    final_results.sort(key = lambda i: (i['_session'], i['code']))
+
+    # step 4: write reuluts to sheet
+    write_results(final_results, level_status)
+    
+    # step 5: remove unused sheets
+    for sheet in wb.worksheets:
+        if sheet[sheetMap['session']].value == None:
+            wb.remove(sheet)
     wb.save('output/testing.xlsx')
     return
 
-department = 'MEG'
+def write_results(results, status):
+    sems = {}
+    for result in results:
+        level = status['sessions'].index(result['session']) * 100
+        sem_id = str(level + result['sem'])
+        if sems.get(sem_id) == None:
+            sems[sem_id] = 0
+        i = sems[sem_id]
+        if i >= 14:
+            continue
+        ws = wb['L' + str(level)]
+        ws['A' + str(i + [11, 28][result['sem'] - 1])] = result['code']
+        ws['B' + str(i + [11, 28][result['sem'] - 1])] = result['title']
+        ws['C' + str(i + [11, 28][result['sem'] - 1])] = result['cu']
+        ws['D' + str(i + [11, 28][result['sem'] - 1])] = result.get('score')
+        if result.get('comment') != '' and result.get('comment') != None:
+            ws.cell(i + [11, 28][result['sem'] - 1], 4).comment = Comment('Revisions:\n' + result.get('comment'), 'Auto', width=300)
+        sems[sem_id] += 1
+    return
 
 sheetMap = {
-    'name': 'C6',
-    'soo': 'C7',
-    'mat_no': 'F6',
-    'sex': 'I7',
-    'marital': 'G7',
-    'session': 'E9'
-}
-
-courseMapMEG = {
-    'chm_130_1': {
-        'level': '100',
-        'cell': 'F11'
-    },
-    'ges_100_1': {
-        'level': '100',
-        'cell': 'F12'
-    },
-    'ges_102_1': {
-        'level': '100',
-        'cell': 'F13'
-    },
-    'chm_131_2': {
-        'level': '100',
-        'cell': 'F18'
-    },
-    'eng_102_2': {
-        'level': '100',
-        'cell': 'F19'
-    },
-    'eng_103_2': {
-        'level': '100',
-        'cell': 'F20'
-    },
-
-
-    'phy_216_1': {
-        'level': '200',
-        'cell': 'F11'
-    },
-    'eng_201_1': {
-        'level': '200',
-        'cell': 'F12'
-    },
-    'eng_202_1': {
-        'level': '200',
-        'cell': 'F13'
-    },
-    'chm_240_2': {
-        'level': '200',
-        'cell': 'F18'
-    },
-    'eng_206_2': {
-        'level': '200',
-        'cell': 'F19'
-    },
-    'eng_207_2': {
-        'level': '200',
-        'cell': 'F20'
-    }
-}
-
-courseMapMCT = {
-    'chm_130_1': {
-        'level': '100',
-        'cell': 'F11'
-    }
+    'name': 'B6',
+    'soo': 'B7',
+    'mat_no': 'D6',
+    'sex': 'G7',
+    'marital': 'E7',
+    'session': 'C9',
+    'hod': 'B46',
+    'dept': 'A3',
+    'faculty': 'A2'
 }
 
 get_spread_sheet()
