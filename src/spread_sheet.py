@@ -90,9 +90,9 @@ class _Level(object):
             hod_cell = str(22 + self.total_shift)
             self.ws['B' + hod_cell] = self.ws['B' + hod_cell].value.replace('22', self.lead_data.hod)
 
-def generate_spread_sheet(user, results, courses, filename):
+def generate_spread_sheet(user, results, courses, template, filename):
     global _wb
-    _wb = load_workbook('static/excel/spreadsheet_template.xlsx')
+    _wb = load_workbook(template)
 
     user['name'] = (user['last_name'].upper() + ', ' + 
         user['first_name'].capitalize() + ' ' + user['other_name'].capitalize())
@@ -172,5 +172,9 @@ if __name__ == '__main__':
 
     if user['department'] == 'MCT':
         courses = MCT
-    generate_spread_sheet(user, result, courses, filename='output/sample_spreadsheet.xlsx')
+    generate_spread_sheet(
+        user, result, courses, 
+        filename='output/sample_spreadsheet.xlsx',
+        template='static/excel/spreadsheet_template.xlsx',
+    )
 
