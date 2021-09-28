@@ -9,7 +9,7 @@ user = {
     'department': 'MEG'
 }
 
-results = [
+result = [
     {'courseCode': 'ges_100_1', 'score': 65, 'session': 2016},
     {'courseCode': 'ges_102_1', 'score': 84, 'session': 2016},
     {'courseCode': 'chm_130_1', 'score': 54, 'session': 2016},

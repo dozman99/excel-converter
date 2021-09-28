@@ -163,14 +163,14 @@ def _write_results(results, status):
 
 if __name__ == '__main__':
     # Run a test using sample data
-    from sample_result import user, results
-    from courses import MEG, MCT
+    from sample_data.result import user, result
+    from sample_data.courses import MEG, MCT
     
     # sort results by only session
-    results.sort(key = lambda i: (i['session']))
+    result.sort(key = lambda i: (i['session']))
     courses = MEG
 
     if user['department'] == 'MCT':
         courses = MCT
-    generate_spread_sheet(user, results, courses, filename='output/sample_spreadsheet.xlsx')
+    generate_spread_sheet(user, result, courses, filename='output/sample_spreadsheet.xlsx')
 
