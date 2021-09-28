@@ -1,10 +1,101 @@
 from openpyxl import load_workbook
 from openpyxl.comments import Comment
 from sample_result import user, results
-import courses
+import courses, re
+
+sheetMap = {
+    'name': 'B6',
+    'soo': 'B7',
+    'mat_no': 'D6',
+    'sex': 'G7',
+    'marital': 'E7',
+    'session': 'C9',
+    'hod': 'B22',
+    'dept': 'A3',
+    'faculty': 'A2'
+}
+
+class LeadData(object):
+    hod = "22"
+    def __init__(self):
+        super().__init__()
+
+class Level(object):
+    def __init__(self, level, session, ws, lead_data,  is_lead=False, is_tail=False):
+        super().__init__()
+        self.results = [[],[]]
+        self.total_shift = 0
+        self.ws = ws
+        self.level = level
+        self.session = session
+        self.lead_data = lead_data
+        self.is_lead = is_lead
+        self.is_tail = is_tail
+        self.tables = [ws.tables.get('S' + str(level) + '.1'), ws.tables.get('S' + str(level) + '.2')]
+    
+    def add_result(self, result, semester):
+        self.results[semester - 1].append(result)
+
+    def commit(self):
+        ws = self.ws
+        ws[sheetMap['session']] = str(self.session - 1) + '/' + str(self.session)
+        
+        row_shift1 = len(self.results[0]) - 1
+        ref1 = self.tables[0].ref
+        if row_shift1 > 0:
+            ws.insert_rows(int(self._split_ref_(ref1)[4]), row_shift1)
+            self.tables[0].ref = self._shift_range_(ref1, row_shift1)
+        else:
+            row_shift1 = 0
+
+        row_shift2 = len(self.results[1]) - 1
+        ref2 = self.tables[1].ref
+        if row_shift1 > 0 or row_shift2 > 0:
+            if row_shift2 > 0:
+                ws.insert_rows(int(self._split_ref_(ref2)[4]) + row_shift1, row_shift2)
+            else:
+                row_shift2 = 0
+            self.tables[1].ref = self._shift_range_(ref2, row_shift1 + row_shift2, row_shift1)
+        
+        refs = [
+            int(self._split_ref_(self.tables[0].ref)[2]) + 1,
+            int(self._split_ref_(self.tables[1].ref)[2]) + 1
+        ]
+        for c in range(2):
+            i = 0
+            for result in self.results[c]:
+                top = refs[result['sem'] - 1]
+                ws['A' + str(i + top)] = result['code']
+                ws['B' + str(i + top)] = result['title']
+                ws['C' + str(i + top)] = result['cu']
+                ws['D' + str(i + top)] = result.get('score')
+                for c in range(3, 8):
+                    ws.cell(i + top, c).style = ws.cell(top, c).style
+                for c in range(5, 8):
+                    ws.cell(i + top, c).value = ws.cell(top, c).value
+                if result.get('comment') != '' and result.get('comment') != None:
+                    ws.cell(i + top, 4).comment = Comment('Revisions:\n' + result.get('comment'), 'Auto', width=300)
+                i += 1
+        total_shift = row_shift1 + row_shift2
+        self.total_shift = total_shift
+        if self.is_lead:
+            self.lead_data.hod = str(22 + total_shift)
+        if self.is_tail:
+            ws['G' + str(23 + total_shift)] = ws['G' + str(23 + total_shift)].value.replace('20', str(20 + total_shift))
+
+    def _shift_range_(self, range, bottom, top=0):
+        rng = self._split_ref_(range)
+        return rng[1] + str(int(rng[2]) + top) + ':' + rng[3] + str(int(rng[4]) + bottom)
+
+    def _split_ref_(self, ref):
+        return re.split('([A-Z]+)(\d+):([A-Z]+)(\d+)', ref)
+
+    def finish(self):
+        if not self.is_lead:
+            hod_cell = str(22 + self.total_shift)
+            self.ws['B' + hod_cell] = self.ws['B' + hod_cell].value.replace('22', self.lead_data.hod)
 
 wb = load_workbook('static/excel/spreadsheet_template.xlsx')
-
 # sort only by session
 results.sort(key = lambda i: (i['session']))
 
@@ -14,7 +105,7 @@ def get_spread_sheet():
     for key in user.keys():
         if sheetMap.get(key) != None:
             wb['L100'][sheetMap[key]] = user[key]
-
+    
     level_status = { 'sessions': [0], 'last_sem': 101 }
     result_map = {}
     courseMap = courses.MEG
@@ -49,18 +140,14 @@ def get_spread_sheet():
             session = level_status['sessions'][int(courseMap[key]['level']/100)]
             result_map[key].update({'courseCode': key, 'cu': None, '_session': session + 0.5, 'session': session })
 
-    # step 3: write the session to sheet
-    for i in range(1, len(level_status['sessions'])):
-        wb['L' + str(i * 100)][sheetMap['session']] = str(level_status['sessions'][i] - 1) + '/' + str(level_status['sessions'][i])
-
     final_results = []
     final_results.extend(result_map.values())
     final_results.sort(key = lambda i: (i['_session'], i['code']))
 
-    # step 4: write reuluts to sheet
+    # step 3: write reuluts to sheet
     write_results(final_results, level_status)
     
-    # step 5: remove unused sheets
+    # step 4: remove unused sheets
     for sheet in wb.worksheets:
         if sheet[sheetMap['session']].value == None:
             wb.remove(sheet)
@@ -68,35 +155,18 @@ def get_spread_sheet():
     return
 
 def write_results(results, status):
-    sems = {}
+    levels = {}
+    lead_data = LeadData()
     for result in results:
-        level = status['sessions'].index(result['session']) * 100
-        sem_id = str(level + result['sem'])
-        if sems.get(sem_id) == None:
-            sems[sem_id] = 0
-        i = sems[sem_id]
-        if i >= 14:
-            continue
-        ws = wb['L' + str(level)]
-        ws['A' + str(i + [11, 28][result['sem'] - 1])] = result['code']
-        ws['B' + str(i + [11, 28][result['sem'] - 1])] = result['title']
-        ws['C' + str(i + [11, 28][result['sem'] - 1])] = result['cu']
-        ws['D' + str(i + [11, 28][result['sem'] - 1])] = result.get('score')
-        if result.get('comment') != '' and result.get('comment') != None:
-            ws.cell(i + [11, 28][result['sem'] - 1], 4).comment = Comment('Revisions:\n' + result.get('comment'), 'Auto', width=300)
-        sems[sem_id] += 1
-    return
-
-sheetMap = {
-    'name': 'B6',
-    'soo': 'B7',
-    'mat_no': 'D6',
-    'sex': 'G7',
-    'marital': 'E7',
-    'session': 'C9',
-    'hod': 'B46',
-    'dept': 'A3',
-    'faculty': 'A2'
-}
+        level = status['sessions'].index(result['session'])
+        sem = result['sem']
+        if levels.get(str(level)) == None:
+            levels[str(level)] = Level(level, result['session'], wb['L' + str(level * 100)], lead_data, is_lead=level == 1, is_tail=level>=5)
+        levels[str(level)].add_result(result, sem)
+    for level in levels.values():
+        level.commit()
+    for level in levels.values():
+        level.finish()
 
 get_spread_sheet()
+
