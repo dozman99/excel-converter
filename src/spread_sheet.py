@@ -1,26 +1,21 @@
 from openpyxl import load_workbook
 from openpyxl.comments import Comment
-from sample_result import user, results
-import courses, re
+import re
 
-sheetMap = {
-    'name': 'B6',
-    'soo': 'B7',
-    'mat_no': 'D6',
-    'sex': 'G7',
-    'marital': 'E7',
-    'session': 'C9',
-    'hod': 'B22',
-    'dept': 'A3',
-    'faculty': 'A2'
+_wb = None
+
+_sheetMap = {
+    'name': 'B6', 'soo': 'B7', 'mat_no': 'D6',
+    'sex': 'G7', 'marital': 'E7', 'session': 'C9',
+    'hod': 'B22', 'dept': 'A3', 'faculty': 'A2'
 }
 
-class LeadData(object):
+class _LeadData(object):
     hod = "22"
     def __init__(self):
         super().__init__()
 
-class Level(object):
+class _Level(object):
     def __init__(self, level, session, ws, lead_data,  is_lead=False, is_tail=False):
         super().__init__()
         self.results = [[],[]]
@@ -38,13 +33,13 @@ class Level(object):
 
     def commit(self):
         ws = self.ws
-        ws[sheetMap['session']] = str(self.session - 1) + '/' + str(self.session)
+        ws[_sheetMap['session']] = str(self.session - 1) + '/' + str(self.session)
         
         row_shift1 = len(self.results[0]) - 1
         ref1 = self.tables[0].ref
         if row_shift1 > 0:
-            ws.insert_rows(int(self._split_ref_(ref1)[4]), row_shift1)
-            self.tables[0].ref = self._shift_range_(ref1, row_shift1)
+            ws.insert_rows(int(self._split_ref(ref1)[4]), row_shift1)
+            self.tables[0].ref = self._shift_range(ref1, row_shift1)
         else:
             row_shift1 = 0
 
@@ -52,14 +47,14 @@ class Level(object):
         ref2 = self.tables[1].ref
         if row_shift1 > 0 or row_shift2 > 0:
             if row_shift2 > 0:
-                ws.insert_rows(int(self._split_ref_(ref2)[4]) + row_shift1, row_shift2)
+                ws.insert_rows(int(self._split_ref(ref2)[4]) + row_shift1, row_shift2)
             else:
                 row_shift2 = 0
-            self.tables[1].ref = self._shift_range_(ref2, row_shift1 + row_shift2, row_shift1)
+            self.tables[1].ref = self._shift_range(ref2, row_shift1 + row_shift2, row_shift1)
         
         refs = [
-            int(self._split_ref_(self.tables[0].ref)[2]) + 1,
-            int(self._split_ref_(self.tables[1].ref)[2]) + 1
+            int(self._split_ref(self.tables[0].ref)[2]) + 1,
+            int(self._split_ref(self.tables[1].ref)[2]) + 1
         ]
         for c in range(2):
             i = 0
@@ -83,11 +78,11 @@ class Level(object):
         if self.is_tail:
             ws['G' + str(23 + total_shift)] = ws['G' + str(23 + total_shift)].value.replace('20', str(20 + total_shift))
 
-    def _shift_range_(self, range, bottom, top=0):
-        rng = self._split_ref_(range)
+    def _shift_range(self, range, bottom, top=0):
+        rng = self._split_ref(range)
         return rng[1] + str(int(rng[2]) + top) + ':' + rng[3] + str(int(rng[4]) + bottom)
 
-    def _split_ref_(self, ref):
+    def _split_ref(self, ref):
         return re.split('([A-Z]+)(\d+):([A-Z]+)(\d+)', ref)
 
     def finish(self):
@@ -95,26 +90,22 @@ class Level(object):
             hod_cell = str(22 + self.total_shift)
             self.ws['B' + hod_cell] = self.ws['B' + hod_cell].value.replace('22', self.lead_data.hod)
 
-wb = load_workbook('static/excel/spreadsheet_template.xlsx')
-# sort only by session
-results.sort(key = lambda i: (i['session']))
+def generate_spread_sheet(user, results, courses, filename):
+    global _wb
+    _wb = load_workbook('static/excel/spreadsheet_template.xlsx')
 
-def get_spread_sheet():
     user['name'] = (user['last_name'].upper() + ', ' + 
         user['first_name'].capitalize() + ' ' + user['other_name'].capitalize())
     for key in user.keys():
-        if sheetMap.get(key) != None:
-            wb['L100'][sheetMap[key]] = user[key]
+        if _sheetMap.get(key) != None:
+            _wb['L100'][_sheetMap[key]] = user[key]
     
     level_status = { 'sessions': [0], 'last_sem': 101 }
     result_map = {}
-    courseMap = courses.MEG
 
-    if user['department'] == 'MCT':
-        courseMap = courses.MCT
     # step 1: remove carry-overs
     for result in results:
-        result.update(courseMap[result['courseCode']])
+        result.update(courses[result['courseCode']])
         result.update({'_session': result['session'], 'comment': ''})
         map = result_map.get(result['courseCode'])
         if  level_status['sessions'][-1] != result['session']:
@@ -134,10 +125,10 @@ def get_spread_sheet():
                 + str(result['session']) + ', score: ' + str(result['score']) + ']\n')
 
     # step 2: add missing courses till last semester    
-    for key in courseMap.keys():
-        if result_map.get(key) == None and courseMap[key]['level'] + courseMap[key]['sem'] <= level_status['last_sem']:
-            result_map[key] = courseMap[key]
-            session = level_status['sessions'][int(courseMap[key]['level']/100)]
+    for key in courses.keys():
+        if result_map.get(key) == None and courses[key]['level'] + courses[key]['sem'] <= level_status['last_sem']:
+            result_map[key] = courses[key]
+            session = level_status['sessions'][int(courses[key]['level']/100)]
             result_map[key].update({'courseCode': key, 'cu': None, '_session': session + 0.5, 'session': session })
 
     final_results = []
@@ -145,28 +136,41 @@ def get_spread_sheet():
     final_results.sort(key = lambda i: (i['_session'], i['code']))
 
     # step 3: write reuluts to sheet
-    write_results(final_results, level_status)
+    _write_results(final_results, level_status)
     
     # step 4: remove unused sheets
-    for sheet in wb.worksheets:
-        if sheet[sheetMap['session']].value == None:
-            wb.remove(sheet)
-    wb.save('output/testing.xlsx')
-    return
+    for sheet in _wb.worksheets:
+        if sheet[_sheetMap['session']].value == None:
+            _wb.remove(sheet)
+    _wb.save(filename)
+    _wb.close()
+    _wb = None
 
-def write_results(results, status):
+
+def _write_results(results, status):
     levels = {}
-    lead_data = LeadData()
+    lead_data = _LeadData()
     for result in results:
         level = status['sessions'].index(result['session'])
         sem = result['sem']
         if levels.get(str(level)) == None:
-            levels[str(level)] = Level(level, result['session'], wb['L' + str(level * 100)], lead_data, is_lead=level == 1, is_tail=level>=5)
+            levels[str(level)] = _Level(level, result['session'], _wb['L' + str(level * 100)], lead_data, is_lead=level == 1, is_tail=level>=5)
         levels[str(level)].add_result(result, sem)
     for level in levels.values():
         level.commit()
     for level in levels.values():
         level.finish()
 
-get_spread_sheet()
+if __name__ == '__main__':
+    # Run a test using sample data
+    from sample_result import user, results
+    from courses import MEG, MCT
+    
+    # sort results by only session
+    results.sort(key = lambda i: (i['session']))
+    courses = MEG
+
+    if user['department'] == 'MCT':
+        courses = MCT
+    generate_spread_sheet(user, results, courses, filename='output/sample_spreadsheet.xlsx')
 

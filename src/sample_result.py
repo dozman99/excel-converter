@@ -3,7 +3,7 @@ user = {
     'last_name': 'Doe',
     'other_name': '',
     'soo': 'Rivers',
-    'mat_no': 'U2015/3025102',
+    'mat_no': 'U2015/3025000',
     'sex': 'M',
     'marital': 'Single',
     'department': 'MEG'
