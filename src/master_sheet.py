@@ -148,7 +148,11 @@ class MasterSheet(object):
 
 if __name__ == '__main__':
     # Run a test using sample master sheet
-    master = MasterSheet('static/excel/ENG301.1.xlsx', courseCode='chm_130_1', session=2019)
+    root = ''
+    if __file__ != None:
+        root = re.sub('/[^/]+$', '/', __file__.replace('\\', '/')) + '../'
+
+    master = MasterSheet(root + 'static/excel/ENG301.1.xlsx', courseCode='chm_130_1', session=2019)
     results = master.get_results()
     batch = master.batchId
     code = master.courseCode

@@ -165,16 +165,28 @@ if __name__ == '__main__':
     # Run a test using sample data
     from sample_data.result import user, result
     from sample_data.courses import MEG, MCT
-    
+    import os
+
     # sort results by only session
     result.sort(key = lambda i: (i['session']))
     courses = MEG
+    root = ''
 
     if user['department'] == 'MCT':
         courses = MCT
+    
+    if __file__ != None:
+        root = re.sub('/[^/]+$', '/', __file__.replace('\\', '/')) + '../'
+    
+    try:
+        os.mkdir(root + 'output')
+        print('output directory created')
+    except:
+        print('output directory already exists, skipping')
+
     generate_spread_sheet(
         user, result, courses, 
-        filename='output/sample_spreadsheet.xlsx',
-        template='static/excel/spreadsheet_template.xlsx',
+        filename=root + 'output/sample_spreadsheet.xlsx',
+        template=root + 'static/excel/spreadsheet_template.xlsx',
     )
 
